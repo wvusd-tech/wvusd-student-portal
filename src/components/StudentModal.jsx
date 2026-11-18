@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   BookOpen,
@@ -20,7 +20,9 @@ import {
 import {
   getSiteLogo,
   SBAC_PERFORMANCE_LEVELS,
-  ELPAC_PERFORMANCE_LEVELS
+  ELPAC_PERFORMANCE_LEVELS,
+  getPartLabel,
+  ELPAC_PARTS
 } from '../config/constants.js';
 import { generateNotebookLMPrompt } from '../utils/studentDataMerger.js';
 
@@ -29,6 +31,7 @@ export default function StudentModal({ student, onClose }) {
 
   const [activeTab, setActiveTab] = useState('benchmarks'); // 'benchmarks', 'sbac', 'elpac', 'prompt'
   const [benchmarkSubTab, setBenchmarkSubTab] = useState('overview'); // 'overview' | specific tab name (e.g. '5th ELA', '5th Math')
+  const [elpacPartFilter, setElpacPartFilter] = useState('ALL'); // 'ALL' | 'OVERALL' | 'DOMAINS'
   const [copied, setCopied] = useState(false);
   const [promptMode, setPromptMode] = useState('overview');
   const [prevStudentId, setPrevStudentId] = useState(student.studentId || student.id);
@@ -38,6 +41,7 @@ export default function StudentModal({ student, onClose }) {
     setPrevStudentId(student.studentId || student.id);
     setBenchmarkSubTab('overview');
     setActiveTab('benchmarks');
+    setElpacPartFilter('ALL');
   }
 
   // Keyboard escape handler
@@ -58,6 +62,53 @@ export default function StudentModal({ student, onClose }) {
   const sortedMath = [...(student.sbac?.mathHistory || [])].sort((a, b) => (Number(a.year) || 0) - (Number(b.year) || 0));
   const sortedPlacements = [...(student.sbac?.mathPlacements || [])].sort((a, b) => (Number(a.year) || 0) - (Number(b.year) || 0));
 
+  // ELPAC Resolved Parts & Scale Scores
+  const partsLatest = student.partsLatest || {};
+  const elpacHistory = Array.isArray(student.elpacHistory) ? student.elpacHistory : [];
+
+  const findPartRec = (p) => {
+    return partsLatest[String(p)] || partsLatest[p] || elpacHistory.find(r => Number(r.part) === p) || null;
+  };
+
+  const part0 = findPartRec(0);
+  const part1 = findPartRec(1);
+  const part2 = findPartRec(2);
+  const part3 = findPartRec(3); // Listening
+  const part4 = findPartRec(4); // Speaking
+  const part5 = findPartRec(5); // Reading
+  const part6 = findPartRec(6); // Writing
+
+  // Overall
+  const overallLevel = student.latestOverall?.performanceLevel || part0?.performanceLevel || null;
+  const overallRaw = student.latestOverall?.rawLevel || part0?.rawLevel || (overallLevel ? `Level ${overallLevel}` : 'Not recorded');
+  const overallScore = student.latestOverall?.scaledScore || part0?.scaledScore || elpacHistory.find(r => Number(r.part) === 0 && r.scaledScore)?.scaledScore || null;
+
+  // Oral
+  const oralLevel = student.latestOral?.performanceLevel || part1?.performanceLevel || null;
+  const oralRaw = student.latestOral?.rawLevel || part1?.rawLevel || (oralLevel ? `Level ${oralLevel}` : 'Not recorded');
+  const oralScore = student.latestOral?.scaledScore || part1?.scaledScore || elpacHistory.find(r => Number(r.part) === 1 && r.scaledScore)?.scaledScore || null;
+
+  // Written
+  const writtenLevel = student.latestWritten?.performanceLevel || part2?.performanceLevel || null;
+  const writtenRaw = student.latestWritten?.rawLevel || part2?.rawLevel || (writtenLevel ? `Level ${writtenLevel}` : 'Not recorded');
+  const writtenScore = student.latestWritten?.scaledScore || part2?.scaledScore || elpacHistory.find(r => Number(r.part) === 2 && r.scaledScore)?.scaledScore || null;
+
+  // Sorted ELPAC History for records table
+  const sortedElpacHistory = useMemo(() => {
+    let filtered = elpacHistory;
+    if (elpacPartFilter === 'OVERALL') {
+      filtered = filtered.filter(r => Number(r.part ?? 0) === 0);
+    } else if (elpacPartFilter === 'DOMAINS') {
+      filtered = filtered.filter(r => Number(r.part ?? 0) >= 1 && Number(r.part ?? 0) <= 6);
+    }
+    return [...filtered].sort((a, b) => {
+      const yrA = Number(a.year) || (a.academicYear ? parseInt(a.academicYear, 10) : 0);
+      const yrB = Number(b.year) || (b.academicYear ? parseInt(b.academicYear, 10) : 0);
+      if (yrB !== yrA) return yrB - yrA;
+      return (a.part ?? 0) - (b.part ?? 0);
+    });
+  }, [elpacHistory, elpacPartFilter]);
+
   const handleCopyPrompt = (mode) => {
     const text = generateNotebookLMPrompt(student, mode);
     navigator.clipboard.writeText(text);
@@ -74,6 +125,22 @@ export default function StudentModal({ student, onClose }) {
       );
     }
     const conf = SBAC_PERFORMANCE_LEVELS[level];
+    return (
+      <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${conf.color}`}>
+        {conf.badge}
+      </span>
+    );
+  };
+
+  const getElpacLevelBadge = (level, rawLevel = '') => {
+    if (!level || !ELPAC_PERFORMANCE_LEVELS[level]) {
+      return (
+        <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-500 rounded border border-slate-200">
+          {rawLevel || (level ? `Level ${level}` : 'N/A')}
+        </span>
+      );
+    }
+    const conf = ELPAC_PERFORMANCE_LEVELS[level];
     return (
       <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${conf.color}`}>
         {conf.badge}
@@ -772,67 +839,244 @@ export default function StudentModal({ student, onClose }) {
             </div>
           )}
 
-          {/* TAB 3: ELPAC DOMAIN BREAKDOWN */}
+          {/* TAB 3: ELPAC DOMAIN BREAKDOWN & HISTORICAL TEST RECORDS */}
           {activeTab === 'elpac' && (
             <div className="space-y-6 animate-fade-in">
+              {/* Top 3 Metric Cards: Overall, Oral, Written */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Overall ELPAC</span>
-                  <div className="text-2xl font-extrabold text-slate-900 mt-1">
-                    {student.latestOverall?.rawLevel || (student.latestOverall?.performanceLevel ? `Level ${student.latestOverall.performanceLevel}` : 'Not recorded')}
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-2xl font-extrabold text-slate-900">
+                      {overallRaw}
+                    </span>
+                    {overallLevel && getElpacLevelBadge(overallLevel)}
                   </div>
-                  <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-                    Scale Score: {student.latestOverall?.scaledScore || '—'}
+                  <span className="text-[11px] text-slate-500 font-mono mt-1.5 block">
+                    Scale Score: <strong className="text-slate-800">{overallScore || '—'}</strong>
                   </span>
                 </div>
 
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Oral Language</span>
-                  <div className="text-2xl font-extrabold text-slate-900 mt-1">
-                    {student.latestOral?.rawLevel || (student.latestOral?.performanceLevel ? `Level ${student.latestOral.performanceLevel}` : 'Not recorded')}
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-2xl font-extrabold text-slate-900">
+                      {oralRaw}
+                    </span>
+                    {oralLevel && getElpacLevelBadge(oralLevel)}
                   </div>
-                  <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-                    Scale Score: {student.latestOral?.scaledScore || '—'}
+                  <span className="text-[11px] text-slate-500 font-mono mt-1.5 block">
+                    Scale Score: <strong className="text-slate-800">{oralScore || '—'}</strong>
                   </span>
                 </div>
 
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Written Language</span>
-                  <div className="text-2xl font-extrabold text-slate-900 mt-1">
-                    {student.latestWritten?.rawLevel || (student.latestWritten?.performanceLevel ? `Level ${student.latestWritten.performanceLevel}` : 'Not recorded')}
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-2xl font-extrabold text-slate-900">
+                      {writtenRaw}
+                    </span>
+                    {writtenLevel && getElpacLevelBadge(writtenLevel)}
                   </div>
-                  <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-                    Scale Score: {student.latestWritten?.scaledScore || '—'}
+                  <span className="text-[11px] text-slate-500 font-mono mt-1.5 block">
+                    Scale Score: <strong className="text-slate-800">{writtenScore || '—'}</strong>
                   </span>
                 </div>
               </div>
 
-              {/* Domain Breakdown */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <span className="text-[11px] text-slate-500 uppercase font-bold block">Listening</span>
-                  <span className="text-base font-bold text-slate-800 mt-1 block font-mono">
-                    {student.latestOverall?.domainListening || '—'}
-                  </span>
+              {/* 4 Domain Breakdown Cards: Listening, Speaking, Reading, Writing */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Language Domain Proficiency Breakdown
+                  </h4>
+                  <span className="text-[11px] text-slate-400">California ELPAC Domains (Parts 3–6)</span>
                 </div>
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <span className="text-[11px] text-slate-500 uppercase font-bold block">Speaking</span>
-                  <span className="text-base font-bold text-slate-800 mt-1 block font-mono">
-                    {student.latestOverall?.domainSpeaking || '—'}
-                  </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { title: 'Listening', part: part3 },
+                    { title: 'Speaking', part: part4 },
+                    { title: 'Reading', part: part5 },
+                    { title: 'Writing', part: part6 }
+                  ].map(({ title, part }) => {
+                    const level = part?.performanceLevel;
+                    const raw = part?.rawLevel;
+                    const score = part?.scaledScore;
+                    const displayLevel = raw || (level ? `Level ${level}` : '—');
+                    return (
+                      <div key={title} className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-xs flex flex-col justify-between items-center text-center">
+                        <span className="text-[11px] text-slate-500 uppercase font-bold tracking-wider block">{title}</span>
+                        <div className="my-1.5">
+                          {level ? (
+                            <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg border ${
+                              level >= 3 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                              level === 2 ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                              'bg-rose-50 text-rose-800 border-rose-200'
+                            }`}>
+                              {displayLevel}
+                            </span>
+                          ) : (
+                            <span className="text-base font-bold text-slate-400 font-mono">—</span>
+                          )}
+                        </div>
+                        {score ? (
+                          <span className="text-[10px] text-slate-500 font-mono">Scale Score: {score}</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-mono">{part?.dateTaken || (part?.testWindow ? `${part.testWindow} Window` : 'Latest record')}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <span className="text-[11px] text-slate-500 uppercase font-bold block">Reading</span>
-                  <span className="text-base font-bold text-slate-800 mt-1 block font-mono">
-                    {student.latestOverall?.domainReading || '—'}
-                  </span>
+              </div>
+
+              {/* California ELPAC Status & Reclassification Readiness Banner */}
+              <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <Languages className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-slate-700 leading-relaxed">
+                  <h4 className="font-bold text-amber-900 text-sm mb-1">
+                    California ELPAC & English Language Development Status
+                  </h4>
+                  <p>
+                    {student.flags?.elStatus === 'RFEP'
+                      ? 'Student has successfully attained Redesignated Fluent English Proficient (RFEP) status in WVUSD.'
+                      : (overallLevel >= 4 || (typeof overallRaw === 'string' && overallRaw.includes('Level 4')))
+                      ? 'Student meets Criterion 1 for Reclassification (Overall Level 4 - Well Developed). Review local ELA benchmarks and teacher evaluation for RFEP eligibility.'
+                      : (overallLevel === 3 || (typeof overallRaw === 'string' && overallRaw.includes('Level 3')))
+                      ? 'Student is currently at Level 3 (Moderately Developed), approaching the California threshold for reclassification readiness.'
+                      : 'Student is actively receiving English Language Development (ELD) support to build listening, speaking, reading, and writing proficiency.'}
+                  </p>
                 </div>
-                <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-xs">
-                  <span className="text-[11px] text-slate-500 uppercase font-bold block">Writing</span>
-                  <span className="text-base font-bold text-slate-800 mt-1 block font-mono">
-                    {student.latestOverall?.domainWriting || '—'}
-                  </span>
+              </div>
+
+              {/* Complete California ELPAC & ELD Historical Test Records Table */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                    <h3 className="text-sm font-bold text-slate-800">
+                      Complete California ELPAC & ELD Historical Test Records
+                    </h3>
+                    <span className="text-xs text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {sortedElpacHistory.length} {sortedElpacHistory.length === 1 ? 'Record' : 'Records'}
+                    </span>
+                  </div>
+
+                  {/* Part Filter Toggle */}
+                  <div className="inline-flex rounded-lg p-0.5 bg-slate-200/80 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setElpacPartFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        elpacPartFilter === 'ALL' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      All Parts (0–6)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setElpacPartFilter('OVERALL')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        elpacPartFilter === 'OVERALL' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Overall (Part 0)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setElpacPartFilter('DOMAINS')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        elpacPartFilter === 'DOMAINS' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Sub-Domains (Parts 1–6)
+                    </button>
+                  </div>
                 </div>
+
+                {sortedElpacHistory.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-400 italic">
+                    No historical ELPAC test administrations recorded for this student.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500">
+                          <th className="pb-2.5 pr-3 font-semibold">Academic Year & Window</th>
+                          <th className="pb-2.5 px-3 font-semibold">Date Taken</th>
+                          <th className="pb-2.5 px-3 font-semibold">Grade</th>
+                          <th className="pb-2.5 px-3 font-semibold">Test ID</th>
+                          <th className="pb-2.5 px-3 font-semibold">Part (0–6)</th>
+                          <th className="pb-2.5 px-3 font-semibold">Scaled Score</th>
+                          <th className="pb-2.5 pl-3 font-semibold">Performance Level</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200/60 font-mono">
+                        {sortedElpacHistory.map((rec, i) => {
+                          const partInfo = getPartLabel(rec.part);
+                          const isOverall = Number(rec.part ?? 0) === 0;
+                          const isFall = rec.testWindow === 'Fall';
+                          return (
+                            <tr
+                              key={i}
+                              className={`transition-colors ${
+                                isOverall ? 'bg-white/90 hover:bg-blue-50/40' : 'hover:bg-white/60'
+                              }`}
+                            >
+                              <td className="py-2.5 pr-3 font-sans">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-slate-800">
+                                    {rec.tabLabel || rec.academicYear || rec.year || '—'}
+                                  </span>
+                                  {rec.testWindow && (
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase border ${
+                                        isFall
+                                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                      }`}
+                                    >
+                                      {rec.testWindow}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                                {rec.dateTaken || '—'}
+                              </td>
+                              <td className="py-2.5 px-3 font-sans font-semibold text-slate-700">
+                                Gr {rec.testGrade === 0 ? 'K' : (rec.testGrade ?? student.gradeLevel ?? student.grade)}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold">
+                                  {rec.testId || 'ELPAC'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 font-sans">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                                  isOverall
+                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                }`}>
+                                  <span className="font-mono font-bold">Part {rec.part ?? 0}</span>
+                                  <span>·</span>
+                                  <span>{partInfo.label.replace(/\s*\(Part \d+\)/, '')}</span>
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 font-bold text-slate-900 text-sm">
+                                {rec.scaledScore ?? '—'}
+                              </td>
+                              <td className="py-2.5 pl-3 font-sans">
+                                {getElpacLevelBadge(rec.performanceLevel, rec.rawLevel)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Teacher Observations */}

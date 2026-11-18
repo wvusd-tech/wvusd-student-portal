@@ -709,6 +709,15 @@ Based on this student's SBAC performance and year-over-year trajectory, generate
   }
 
   if (mode === 'elpac') {
+    const p0Score = student.latestOverall?.scaledScore || student.partsLatest?.['0']?.scaledScore || (Array.isArray(student.elpacHistory) ? student.elpacHistory.find(r => Number(r.part) === 0 && r.scaledScore)?.scaledScore : null);
+    const p1Score = student.latestOral?.scaledScore || student.partsLatest?.['1']?.scaledScore || (Array.isArray(student.elpacHistory) ? student.elpacHistory.find(r => Number(r.part) === 1 && r.scaledScore)?.scaledScore : null);
+    const p2Score = student.latestWritten?.scaledScore || student.partsLatest?.['2']?.scaledScore || (Array.isArray(student.elpacHistory) ? student.elpacHistory.find(r => Number(r.part) === 2 && r.scaledScore)?.scaledScore : null);
+
+    const lDom = student.partsLatest?.['3']?.rawLevel || (student.partsLatest?.['3']?.performanceLevel ? `Level ${student.partsLatest['3'].performanceLevel}` : 'N/A');
+    const sDom = student.partsLatest?.['4']?.rawLevel || (student.partsLatest?.['4']?.performanceLevel ? `Level ${student.partsLatest['4'].performanceLevel}` : 'N/A');
+    const rDom = student.partsLatest?.['5']?.rawLevel || (student.partsLatest?.['5']?.performanceLevel ? `Level ${student.partsLatest['5'].performanceLevel}` : 'N/A');
+    const wDom = student.partsLatest?.['6']?.rawLevel || (student.partsLatest?.['6']?.performanceLevel ? `Level ${student.partsLatest['6'].performanceLevel}` : 'N/A');
+
     return `# ELPAC & English Language Development (ELD) Profile
 **Student:** ${student.name} (Grade: ${student.gradeLevel || student.grade})
 **School:** ${student.school} | **Teacher:** ${student.teacherName}
@@ -716,9 +725,15 @@ Based on this student's SBAC performance and year-over-year trajectory, generate
 **Demographic Flags:** ${flagText}
 
 ## Latest ELPAC Scores:
-- **Overall Performance:** ${student.latestOverall?.rawLevel || (student.latestOverall?.performanceLevel ? `Level ${student.latestOverall.performanceLevel}` : 'Not recorded')} (Scale Score: ${student.latestOverall?.scaledScore || '—'})
-- **Oral Language:** ${student.latestOral?.rawLevel || (student.latestOral?.performanceLevel ? `Level ${student.latestOral.performanceLevel}` : 'Not recorded')}
-- **Written Language:** ${student.latestWritten?.rawLevel || (student.latestWritten?.performanceLevel ? `Level ${student.latestWritten.performanceLevel}` : 'Not recorded')}
+- **Overall Performance:** ${student.latestOverall?.rawLevel || (student.latestOverall?.performanceLevel ? `Level ${student.latestOverall.performanceLevel}` : 'Not recorded')} (Scale Score: ${p0Score || '—'})
+- **Oral Language:** ${student.latestOral?.rawLevel || (student.latestOral?.performanceLevel ? `Level ${student.latestOral.performanceLevel}` : 'Not recorded')}${p1Score ? ` (Scale Score: ${p1Score})` : ''}
+- **Written Language:** ${student.latestWritten?.rawLevel || (student.latestWritten?.performanceLevel ? `Level ${student.latestWritten.performanceLevel}` : 'Not recorded')}${p2Score ? ` (Scale Score: ${p2Score})` : ''}
+
+## Domain Breakdown:
+- **Listening:** ${lDom}
+- **Speaking:** ${sDom}
+- **Reading:** ${rDom}
+- **Writing:** ${wDom}
 
 ## Teacher / Counselor Observations:
 ${(student.teacherComments || []).map(c => `- [${c.academicYear || 'Current'} ${c.testWindow || ''}]: ${c.comment}`).join('\n') || 'No teacher observations recorded.'}

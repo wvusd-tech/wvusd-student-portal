@@ -77,3 +77,26 @@ export const ELPAC_PERFORMANCE_LEVELS = {
   2: { label: "Somewhat Developed", badge: "L2 · Somewhat", color: "bg-amber-50 text-amber-800 border-amber-200" },
   1: { label: "Minimally Developed", badge: "L1 · Minimally", color: "bg-rose-50 text-rose-800 border-rose-200" }
 };
+
+export const ELPAC_PARTS = {
+  0: { part: 0, label: "Overall ELPAC", shortLabel: "Part 0 · Overall", category: "OVERALL" },
+  1: { part: 1, label: "Oral Language", shortLabel: "Part 1 · Oral", category: "ORAL" },
+  2: { part: 2, label: "Written Language", shortLabel: "Part 2 · Written", category: "WRITTEN" },
+  3: { part: 3, label: "Listening Domain", shortLabel: "Part 3 · Listening", category: "ORAL" },
+  4: { part: 4, label: "Speaking Domain", shortLabel: "Part 4 · Speaking", category: "ORAL" },
+  5: { part: 5, label: "Reading Domain", shortLabel: "Part 5 · Reading", category: "WRITTEN" },
+  6: { part: 6, label: "Writing Domain", shortLabel: "Part 6 · Writing", category: "WRITTEN" },
+};
+
+export function getPartLabel(partVal) {
+  const num = Number(partVal);
+  if (!isNaN(num) && ELPAC_PARTS[num]) {
+    return ELPAC_PARTS[num];
+  }
+  return {
+    part: partVal ?? 0,
+    label: partVal !== undefined && partVal !== "" ? `Part ${partVal}` : "Overall (Part 0)",
+    shortLabel: partVal !== undefined && partVal !== "" ? `Part ${partVal}` : "Part 0",
+    category: "OVERALL"
+  };
+}
