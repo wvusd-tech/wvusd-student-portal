@@ -6,7 +6,7 @@ export const DISTRICT_NAME = "Walnut Valley Unified School District";
 
 export const GOOGLE_CLIENT_ID =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_GOOGLE_CLIENT_ID) ||
-  "915478440754-0gsp8u23u3qovgh60b643q7n9o2260r8.apps.googleusercontent.com";
+  "243489966839-kcopbaj692oat1p2hoq5lrcddq9n4k17.apps.googleusercontent.com";
 
 export const ELPAC_API_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_ELPAC_URL) ||
