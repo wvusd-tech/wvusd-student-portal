@@ -12,7 +12,7 @@ import {
   fetchDataPortalData
 } from './services/api.js';
 import { mergeStudentStreams } from './utils/studentDataMerger.js';
-import { Sparkles, Users, RefreshCw, UserCheck, Eye, ArrowRightLeft } from 'lucide-react';
+import { Sparkles, Users, RefreshCw, UserCheck, Eye, ArrowRightLeft, ShieldCheck } from 'lucide-react';
 import { getSiteLogo } from './config/constants.js';
 
 export default function App() {
@@ -24,7 +24,7 @@ export default function App() {
   const [isLoadingStreams, setIsLoadingStreams] = useState(false);
   const [authError, setAuthError] = useState(null);
 
-  // Super Admin Teacher Mirroring
+  // Admin Classroom Mirroring (Super Admin & Site Admin)
   const [mirroredTeacher, setMirroredTeacher] = useState(null);
   const [showMirrorModal, setShowMirrorModal] = useState(false);
 
@@ -33,10 +33,20 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [selectedGrade, setSelectedGrade] = useState('ALL');
 
+  // RBAC Roles
   const isSuperAdmin = useMemo(() => {
     if (!user) return false;
     return user.role === 'SuperAdmin' || user.school === 'ALL' || user.email === 'kwendland@wvusd.org';
   }, [user]);
+
+  const isSiteAdmin = useMemo(() => {
+    if (!user) return false;
+    if (isSuperAdmin) return false;
+    return user.role === 'SiteAdmin' || (user.assignedSites && user.assignedSites.length > 0 && user.school !== 'ALL');
+  }, [user, isSuperAdmin]);
+
+  const canMirrorTeachers = isSuperAdmin || isSiteAdmin;
+  const lockedSchool = isSiteAdmin ? (user.assignedSites?.[0] || user.school) : null;
 
   // Handle Google Login / Auth
   const handleLogin = useCallback(async (idToken, fallbackEmail = '') => {
@@ -62,9 +72,9 @@ export default function App() {
       sessionStorage.setItem('wvusd_user_email', activeUser.email);
       if (idToken) sessionStorage.setItem('wvusd_user_token', idToken);
 
-      // If SuperAdmin, show mirror modal automatically
-      const isAdmin = activeUser.role === 'SuperAdmin' || activeUser.school === 'ALL' || activeUser.email === 'kwendland@wvusd.org';
-      if (isAdmin) {
+      // If SuperAdmin or SiteAdmin, show mirror modal automatically
+      const isMirrorRole = activeUser.role === 'SuperAdmin' || activeUser.role === 'SiteAdmin' || activeUser.school === 'ALL' || activeUser.email === 'kwendland@wvusd.org' || (activeUser.assignedSites && activeUser.assignedSites.length > 0);
+      if (isMirrorRole) {
         setShowMirrorModal(true);
       }
 
@@ -112,78 +122,96 @@ export default function App() {
 
   // Determine Classroom Students (either mirrored teacher's students or teacher's own students)
   const classroomStudents = useMemo(() => {
-    if (isSuperAdmin) {
+    if (canMirrorTeachers) {
       if (!mirroredTeacher) return [];
       return allDistrictStudents.filter(s => {
         const tMatch = s.teacherEmail?.toLowerCase() === mirroredTeacher.email?.toLowerCase() ||
           s.teacherName?.toLowerCase() === mirroredTeacher.name?.toLowerCase();
-        const sMatch = s.school === mirroredTeacher.school;
+        const sMatch = !mirroredTeacher.school || s.school === mirroredTeacher.school;
         return tMatch && sMatch;
       });
     }
     return allDistrictStudents;
-  }, [isSuperAdmin, mirroredTeacher, allDistrictStudents]);
+  }, [canMirrorTeachers, mirroredTeacher, allDistrictStudents]);
 
-  // Extract Available Grades for Filter Bar
+  // Extract Available Grades dynamically for filter buttons
   const availableGrades = useMemo(() => {
-    const set = new Set();
+    const gradesSet = new Set();
     classroomStudents.forEach(s => {
-      if (s.isKinder) set.add('Kinder');
-      else if (s.gradeNum !== undefined && s.gradeNum !== null) set.add(s.gradeNum);
+      if (s.isKinder) gradesSet.add('Kinder');
+      else if (s.gradeNum !== undefined && s.gradeNum !== null) gradesSet.add(s.gradeNum);
+      else if (s.gradeLevel) gradesSet.add(s.gradeLevel);
     });
-    return Array.from(set).sort((a, b) => {
-      if (a === 'Kinder') return -1;
-      if (b === 'Kinder') return 1;
-      return a - b;
-    });
+
+    const hasKinder = gradesSet.has('Kinder');
+    gradesSet.delete('Kinder');
+
+    const numGrades = Array.from(gradesSet).sort((a, b) => Number(a) - Number(b));
+    const result = [];
+    if (hasKinder) result.push('Kinder');
+    return result.concat(numGrades);
   }, [classroomStudents]);
 
-  // Demographic & Flag Counts
+  // Compute demographic counts for quick chips
   const counts = useMemo(() => {
+    let sped = 0, p504 = 0, el = 0, rfep = 0, foster = 0;
+    classroomStudents.forEach(s => {
+      if (s.flags?.sped) sped++;
+      if (s.flags?.plan504) p504++;
+      if (s.flags?.elStatus && s.flags.elStatus !== 'EO') {
+        if (s.flags.elStatus === 'RFEP') rfep++;
+        else el++;
+      }
+      if (s.flags?.homelessFoster) foster++;
+    });
     return {
       total: classroomStudents.length,
-      sped: classroomStudents.filter(s => s.flags?.sped).length,
-      plan504: classroomStudents.filter(s => s.flags?.plan504).length,
-      el: classroomStudents.filter(s => s.flags?.elStatus && s.flags.elStatus !== 'EO' && s.flags.elStatus !== 'RFEP').length,
-      rfep: classroomStudents.filter(s => s.flags?.elStatus === 'RFEP').length,
-      homelessFoster: classroomStudents.filter(s => s.flags?.homelessFoster).length
+      sped,
+      504: p504,
+      el,
+      rfep,
+      foster
     };
   }, [classroomStudents]);
 
-  // Filter & Search Logic
+  // Filtered Students based on search query, demographic filter, and grade selection
   const filteredStudents = useMemo(() => {
-    return classroomStudents.filter(s => {
-      // Search Query
+    return classroomStudents.filter(student => {
+      // 1. Grade Filter
+      if (selectedGrade !== 'ALL') {
+        if (selectedGrade === 'Kinder' && !student.isKinder) return false;
+        if (selectedGrade !== 'Kinder') {
+          const matchGrade = student.gradeNum === Number(selectedGrade) ||
+            String(student.gradeLevel || student.grade) === String(selectedGrade);
+          if (!matchGrade) return false;
+        }
+      }
+
+      // 2. Demographic Filter
+      if (activeFilter === 'SPED' && !student.flags?.sped) return false;
+      if (activeFilter === '504' && !student.flags?.plan504) return false;
+      if (activeFilter === 'EL' && (!student.flags?.elStatus || student.flags.elStatus === 'EO' || student.flags.elStatus === 'RFEP')) return false;
+      if (activeFilter === 'RFEP' && student.flags?.elStatus !== 'RFEP') return false;
+      if (activeFilter === 'FOSTER' && !student.flags?.homelessFoster) return false;
+
+      // 3. Search Query (Name, Student ID, Teacher)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const nameMatch = (s.name || '').toLowerCase().includes(q);
-        const idMatch = String(s.studentId || s.id || '').includes(q);
-        const teacherMatch = (s.teacherName || '').toLowerCase().includes(q);
+        const nameMatch = student.name?.toLowerCase().includes(q);
+        const idMatch = String(student.studentId || student.id || '').includes(q);
+        const teacherMatch = student.teacherName?.toLowerCase().includes(q);
         if (!nameMatch && !idMatch && !teacherMatch) return false;
       }
 
-      // Grade Filter
-      if (selectedGrade !== 'ALL') {
-        if (selectedGrade === 'Kinder' && !s.isKinder) return false;
-        if (selectedGrade !== 'Kinder' && s.gradeNum !== selectedGrade) return false;
-      }
-
-      // Demographic Chip Filter
-      if (activeFilter === 'SPED' && !s.flags?.sped) return false;
-      if (activeFilter === '504' && !s.flags?.plan504) return false;
-      if (activeFilter === 'LEP' && (!s.flags?.elStatus || s.flags.elStatus === 'EO' || s.flags.elStatus === 'RFEP')) return false;
-      if (activeFilter === 'RFEP' && s.flags?.elStatus !== 'RFEP') return false;
-      if (activeFilter === 'FOSTER_HOMELESS' && !s.flags?.homelessFoster) return false;
-
       return true;
     });
-  }, [classroomStudents, searchQuery, selectedGrade, activeFilter]);
+  }, [classroomStudents, selectedGrade, activeFilter, searchQuery]);
 
-  // If not logged in, render LoginView
+  // If not logged in, show Login View
   if (!user) {
     return (
       <LoginView
-        onLoginSuccess={(token) => handleLogin(token, '')}
+        onLoginSuccess={handleLogin}
         error={authError}
         isLoading={isLoadingRoster}
       />
@@ -191,41 +219,54 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans text-slate-900">
+      {/* Primary Header */}
       <Navbar user={user} onLogout={handleLogout} />
 
-      {/* SUPER ADMIN MIRROR BANNER */}
-      {isSuperAdmin && (
-        <div className="bg-amber-500/10 border-b border-amber-300/60 px-4 py-2.5">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 text-amber-900 font-semibold">
-              <Eye className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                Super Admin Mirror Mode:
-                {mirroredTeacher ? (
-                  <strong className="text-slate-900 ml-1">
-                    {mirroredTeacher.name} ({mirroredTeacher.school} · {mirroredTeacher.gradeSummary} · {classroomStudents.length} Students)
-                  </strong>
+      {/* Classroom Mirror Banner (Super Admin & Site Admin) */}
+      {canMirrorTeachers && mirroredTeacher && (
+        <div className={`text-white px-4 py-2.5 shadow-sm ${
+          isSiteAdmin
+            ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700'
+            : 'bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600'
+        }`}>
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="px-2 py-0.5 rounded-full bg-white/20 font-bold tracking-wide uppercase text-[10px] inline-flex items-center gap-1">
+                {isSiteAdmin ? (
+                  <>
+                    <ShieldCheck className="w-3 h-3 text-emerald-200" />
+                    <span>Site Admin Mirroring · {lockedSchool}</span>
+                  </>
                 ) : (
-                  <span className="italic text-amber-700 ml-1">No classroom selected</span>
+                  <>
+                    <Sparkles className="w-3 h-3 text-amber-200" />
+                    <span>Super Admin Mirroring</span>
+                  </>
                 )}
+              </span>
+              <span>
+                Viewing <strong>{mirroredTeacher.name}</strong>'s classroom at <strong>{mirroredTeacher.school}</strong>.
               </span>
             </div>
 
-            <button
-              onClick={() => setShowMirrorModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold transition-all shadow-xs cursor-pointer shrink-0"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              <span>{mirroredTeacher ? 'Switch Teacher Classroom' : 'Select Teacher to Mirror'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowMirrorModal(true)}
+                className="px-3 py-1 bg-white text-slate-800 rounded-lg font-bold hover:bg-slate-50 transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>Switch Teacher</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
+      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
-        {/* Welcome Banner */}
+        {/* Page Title & Status */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -248,17 +289,23 @@ export default function App() {
           )}
         </div>
 
-        {/* If Super Admin has not selected a teacher yet */}
-        {isSuperAdmin && !mirroredTeacher ? (
+        {/* If Admin has not selected a teacher yet */}
+        {canMirrorTeachers && !mirroredTeacher ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4 shadow-xs">
-            <UserCheck className="w-12 h-12 text-amber-500 mx-auto" />
-            <h3 className="text-lg font-bold text-slate-900">Super Admin Classroom Mirroring Required</h3>
+            <UserCheck className={`w-12 h-12 mx-auto ${isSiteAdmin ? 'text-emerald-500' : 'text-amber-500'}`} />
+            <h3 className="text-lg font-bold text-slate-900">
+              {isSiteAdmin ? `Site Administrator Access · ${lockedSchool}` : 'Super Admin Classroom Mirroring Required'}
+            </h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              To keep performance lightning fast and replicate the exact teacher experience, please choose a teacher classroom to mirror.
+              {isSiteAdmin
+                ? `Please choose a classroom teacher at ${lockedSchool} to inspect their classroom roster and assessment metrics.`
+                : 'To keep performance lightning fast and replicate the exact teacher experience, please choose a teacher classroom to mirror.'}
             </p>
             <button
               onClick={() => setShowMirrorModal(true)}
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
+              className={`px-5 py-2.5 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer inline-flex items-center gap-2 ${
+                isSiteAdmin ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+              }`}
             >
               <UserCheck className="w-4 h-4" />
               <span>Choose Teacher Classroom</span>
@@ -321,11 +368,13 @@ export default function App() {
         />
       )}
 
-      {/* Super Admin Teacher Selector Modal */}
+      {/* Teacher Selector Modal (Super Admin & Site Admin) */}
       {showMirrorModal && (
         <TeacherMirrorSelector
           students={allDistrictStudents}
           currentMirroredTeacher={mirroredTeacher}
+          lockedSchool={lockedSchool}
+          isSiteAdmin={isSiteAdmin}
           onSelectTeacher={(teacher) => {
             setMirroredTeacher(teacher);
             setShowMirrorModal(false);

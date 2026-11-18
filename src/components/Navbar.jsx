@@ -4,6 +4,8 @@ import { DISTRICT_LOGO, getSiteLogo } from '../config/constants.js';
 
 export default function Navbar({ user, onLogout }) {
   const schoolLogo = getSiteLogo(user?.school);
+  const isSiteAdmin = user?.role === 'SiteAdmin' || (user?.assignedSites && user.assignedSites.length > 0 && user.school !== 'ALL');
+  const isSuperAdmin = user?.role === 'SuperAdmin' || user?.school === 'ALL' || user?.email === 'kwendland@wvusd.org';
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
@@ -35,10 +37,20 @@ export default function Navbar({ user, onLogout }) {
         <div className="flex items-center gap-3">
           {user && (
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/80 border border-slate-200 text-xs">
-              <User className="w-3.5 h-3.5 text-slate-500" />
+              {isSuperAdmin ? (
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              ) : isSiteAdmin ? (
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <User className="w-3.5 h-3.5 text-slate-500" />
+              )}
               <span className="font-semibold text-slate-800">{user.name || user.email}</span>
               <span className="text-slate-400">·</span>
-              <span className="text-slate-600 font-medium">{user.role || 'Teacher'}</span>
+              <span className={`font-semibold ${
+                isSuperAdmin ? 'text-amber-700' : isSiteAdmin ? 'text-emerald-700' : 'text-slate-600'
+              }`}>
+                {isSuperAdmin ? 'Super Admin' : isSiteAdmin ? 'Site Admin' : (user.role || 'Teacher')}
+              </span>
             </div>
           )}
 
