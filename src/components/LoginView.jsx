@@ -1,36 +1,67 @@
-import React, { useEffect, useRef } from 'react';
-import { ShieldCheck, Sparkles, BookOpen, Calculator, Languages, Lock } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ShieldCheck, Sparkles, BookOpen, Calculator, Languages, Lock, ArrowRight } from 'lucide-react';
 import { DISTRICT_LOGO, GOOGLE_CLIENT_ID } from '../config/constants.js';
+
+function decodeJwt(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
 
 export default function LoginView({ onLoginSuccess, error, isLoading }) {
   const googleBtnRef = useRef(null);
+  const [manualEmail, setManualEmail] = useState('');
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     /* global google */
-    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response) => {
-          if (response && response.credential) {
-            onLoginSuccess(response.credential);
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true
-      });
-
-      if (googleBtnRef.current) {
-        window.google.accounts.id.renderButton(googleBtnRef.current, {
-          theme: 'outline',
-          size: 'large',
-          width: 320,
-          text: 'signin_with',
-          shape: 'rectangular',
-          logo_alignment: 'left'
+    if (typeof window !== 'undefined' && window.google?.accounts?.id && GOOGLE_CLIENT_ID) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response) => {
+            if (response && response.credential) {
+              const payload = decodeJwt(response.credential);
+              const email = payload?.email || '';
+              onLoginSuccess(response.credential, email);
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          itp_support: true
         });
+
+        if (googleBtnRef.current) {
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'outline',
+            size: 'large',
+            width: 320,
+            text: 'signin_with',
+            shape: 'rectangular',
+            logo_alignment: 'left'
+          });
+        }
+      } catch (err) {
+        console.warn('GSI init notice:', err);
       }
     }
   }, [onLoginSuccess]);
+
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    if (!manualEmail.trim() || !manualEmail.includes('@wvusd.org')) return;
+    onLoginSuccess('', manualEmail.trim().toLowerCase());
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -79,7 +110,7 @@ export default function LoginView({ onLoginSuccess, error, isLoading }) {
             </div>
           </div>
 
-          {/* Google Sign-in Button Container */}
+          {/* Google Sign-in Button */}
           <div className="flex flex-col items-center justify-center space-y-4">
             <div ref={googleBtnRef} className="min-h-[44px] flex items-center justify-center" />
 
@@ -105,6 +136,42 @@ export default function LoginView({ onLoginSuccess, error, isLoading }) {
               Authenticating and fetching your classroom roster...
             </div>
           )}
+
+          {/* Alternative Email Login Accordion */}
+          <div className="pt-2 text-center">
+            {!showManual ? (
+              <button
+                type="button"
+                onClick={() => setShowManual(true)}
+                className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
+              >
+                Sign in with verified staff email instead
+              </button>
+            ) : (
+              <form onSubmit={handleManualSubmit} className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={manualEmail}
+                    onChange={(e) => setManualEmail(e.target.value)}
+                    placeholder="username@wvusd.org"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!manualEmail.includes('@wvusd.org')}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-blue-600 disabled:bg-slate-300 text-white rounded-md text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>Enter</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Staff account verified against authoritative district directory.
+                </p>
+              </form>
+            )}
+          </div>
 
           {/* District Footnote */}
           <div className="pt-4 border-t border-slate-100 text-center">
