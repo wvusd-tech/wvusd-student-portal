@@ -121,22 +121,26 @@ export default function StudentCard({ student, onSelect }) {
               <div className="w-full flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                  <span className="font-semibold text-slate-700">Amira:</span>
+                  <span className="font-semibold text-slate-700">Amira Reading:</span>
                   <span className="font-mono font-bold text-slate-900">{amira || '—'}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-purple-500" />
+                  <Calculator className="w-3.5 h-3.5 text-blue-500" />
                   <span className="font-semibold text-slate-700">Writing:</span>
                   <span className="font-mono font-bold text-slate-900">{kinderWriting || '—'}</span>
                 </div>
               </div>
             ) : (
-              // Grade 1-5: STAR Reading & Math Common Assessment
+              // Grades 1-12: STAR Reading (or Amira if 1st/2nd grade) & Math CA
               <div className="w-full flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                  <span className="font-semibold text-slate-700">STAR Reading:</span>
-                  <span className="font-mono font-bold text-slate-900">{starReading || '—'}</span>
+                  <span className="font-semibold text-slate-700">
+                    {starReading ? 'STAR Reading:' : (amira ? 'Amira Reading:' : 'STAR Reading:')}
+                  </span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {starReading || amira || '—'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Calculator className="w-3.5 h-3.5 text-blue-500" />

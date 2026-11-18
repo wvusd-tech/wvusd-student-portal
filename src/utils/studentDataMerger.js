@@ -57,7 +57,7 @@ export function parseMultiAttempt(cellValue) {
   }
   const raw = String(cellValue).trim();
   if (!raw) {
-    return { latest: '', raw: '', history: [], latestNumeric: null };
+    return { latest: '', raw, history: [], latestNumeric: null };
   }
 
   const parts = raw
@@ -135,13 +135,13 @@ export function extractMetricInfo(header) {
     family = 'Amira ARM Fluency';
   } else if (/amira.*dyslexia.*status/i.test(rest)) {
     family = 'Amira Dyslexia Status';
-  } else if (/star.*reading.*instructional.*level/i.test(rest)) {
+  } else if (/star.*reading|instructional.*reading.*level|^star\b/i.test(rest)) {
     family = 'STAR Reading IRL';
   } else if (/star.*math/i.test(rest)) {
     family = 'STAR Math';
   } else if (/oral reading record|\borr\b/i.test(rest)) {
     family = 'Oral Reading Record (ORR)';
-  } else if (/\bmath\b.*percent/i.test(rest) || /math common assessment/i.test(rest)) {
+  } else if (/\bmath\b.*percent|math common assessment/i.test(rest)) {
     family = 'Math Common Assessment';
   } else if (/writing.*narrative/i.test(rest)) {
     family = 'Writing: Narrative';
@@ -483,7 +483,7 @@ export function parseDataPortalStudentRecord(raw) {
   };
 
   const amiraCol = findFamilyLatest(/amira.*arm/i);
-  const starCol = findFamilyLatest(/star.*reading/i);
+  const starCol = findFamilyLatest(/star.*reading|star.*irl|instructional.*reading|^star\b/i);
   const mathCol = findFamilyLatest(/math.*percent|math common/i);
 
   return {
@@ -537,26 +537,72 @@ export function mergeStudentStreams(baseStudents = [], sbacList = [], dataList =
     let amira = parsedData.headline?.amira?.parsed?.latest || null;
     let kinderWriting = null;
 
-    // Scan raw metrics and Kinder tab if needed
-    const rawMetrics = Object.assign({}, student.metrics || {}, rawData.metrics || {});
-    for (const [key, val] of Object.entries(rawMetrics)) {
-      const lower = key.toLowerCase();
-      if (!starReading && (lower.includes('star reading') || lower.includes('star read') || lower === 'star')) {
-        starReading = typeof val === 'object' ? val.latest : val;
-      } else if (!mathCa && (lower.includes('math ca') || lower.includes('math common') || lower.includes('common assessment'))) {
-        mathCa = typeof val === 'object' ? val.latest : val;
-      } else if (!amira && lower.includes('amira')) {
-        amira = typeof val === 'object' ? val.latest : val;
-      } else if (!kinderWriting && lower.includes('writing') && isKinder) {
-        kinderWriting = typeof val === 'object' ? val.latest : val;
+    // Direct multi-attempt fallback search across 1st ELA, 2nd ELA, 3rd ELA, 4th ELA, 5th ELA & Benchmarks tabs
+    if (!starReading && rawData.assessmentsByTab) {
+      for (const [tabName, tabData] of Object.entries(rawData.assessmentsByTab)) {
+        if (/ela|benchmark|reading/i.test(tabName)) {
+          for (const [header, val] of Object.entries(tabData || {})) {
+            if (/star.*reading|instructional.*reading.*level|^star\b/i.test(header) && val) {
+              const p = parseMultiAttempt(val);
+              if (p.latest) {
+                starReading = p.latest;
+                break;
+              }
+            }
+          }
+        }
+        if (starReading) break;
       }
     }
 
-    const kinderTab = rawData.assessmentsByTab?.['Kinder'] || rawData.assessmentsByTab?.['kinder'] || {};
-    for (const [kKey, kVal] of Object.entries(kinderTab)) {
-      const lk = kKey.toLowerCase();
-      if (!amira && lk.includes('amira')) amira = kVal;
-      if (!kinderWriting && (lk.includes('writing') || lk.includes('rubric'))) kinderWriting = kVal;
+    // Direct fallback for Math CA across 1st Math, 2nd Math, 3rd Math, 4th Math, 5th Math & Benchmarks
+    if (!mathCa && rawData.assessmentsByTab) {
+      for (const [tabName, tabData] of Object.entries(rawData.assessmentsByTab)) {
+        if (/math|benchmark/i.test(tabName)) {
+          for (const [header, val] of Object.entries(tabData || {})) {
+            if (/math.*percent|math.*common.*assessment|common.*assessment.*percent/i.test(header) && val) {
+              const p = parseMultiAttempt(val);
+              if (p.latest) {
+                mathCa = p.latest;
+                break;
+              }
+            }
+          }
+        }
+        if (mathCa) break;
+      }
+    }
+
+    // Direct fallback for Amira across tabs
+    if (!amira && rawData.assessmentsByTab) {
+      for (const [tabName, tabData] of Object.entries(rawData.assessmentsByTab)) {
+        for (const [header, val] of Object.entries(tabData || {})) {
+          if (/amira.*arm/i.test(header) && val) {
+            const p = parseMultiAttempt(val);
+            if (p.latest) {
+              amira = p.latest;
+              break;
+            }
+          }
+        }
+        if (amira) break;
+      }
+    }
+
+    // Scan Kinder tab specifically if student is Kindergarten
+    if (isKinder && !kinderWriting && rawData.assessmentsByTab) {
+      const kinderTab = rawData.assessmentsByTab['Kinder'] || rawData.assessmentsByTab['kinder'] || {};
+      for (const [header, val] of Object.entries(kinderTab)) {
+        const lh = header.toLowerCase();
+        if (!amira && lh.includes('amira')) {
+          const p = parseMultiAttempt(val);
+          if (p.latest) amira = p.latest;
+        }
+        if (!kinderWriting && (lh.includes('writing') || lh.includes('rubric'))) {
+          const p = parseMultiAttempt(val);
+          if (p.latest) kinderWriting = p.latest;
+        }
+      }
     }
 
     // SBAC metrics
@@ -622,7 +668,7 @@ export function generateNotebookLMPrompt(student, mode = 'overview') {
 **Demographic Flags:** ${flagText}
 
 ## Local Trimester & Benchmark Snapshot
-- **STAR Reading:** ${student.benchmarks?.starReading || 'Not recorded'}
+- **STAR Reading:** ${student.benchmarks?.starReading || student.benchmarks?.amira || 'Not recorded'}
 - **Math Common Assessment:** ${student.benchmarks?.mathCa || 'Not recorded'}
 ${student.isKinder ? `- **Kindergarten Amira:** ${student.benchmarks?.amira || 'Not recorded'}\n- **Kindergarten Writing Assessment:** ${student.benchmarks?.kinderWriting || 'Not recorded'}` : ''}
 
@@ -690,7 +736,7 @@ Review this student's ELPAC domain balance (Oral vs. Written) and teacher notes.
 **Program Flags:** ${flagText}
 
 ## 1. Local Benchmarks & Classroom Growth
-- STAR Reading: ${student.benchmarks?.starReading || 'N/A'}
+- STAR Reading: ${student.benchmarks?.starReading || student.benchmarks?.amira || 'N/A'}
 - Math Common Assessment: ${student.benchmarks?.mathCa || 'N/A'}
 ${student.isKinder ? `- Amira Kindergarten: ${student.benchmarks?.amira || 'N/A'}\n- Kindergarten Writing: ${student.benchmarks?.kinderWriting || 'N/A'}` : ''}
 

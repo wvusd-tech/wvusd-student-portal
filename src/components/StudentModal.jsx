@@ -371,10 +371,10 @@ export default function StudentModal({ student, onClose }) {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                            {isKinder ? 'Amira Reading Assessment' : 'STAR Reading Score'}
+                            {isKinder ? 'Amira Reading Assessment' : (student.benchmarks?.starReading ? 'STAR Reading Score' : (student.benchmarks?.amira ? 'Amira Reading Assessment' : 'STAR Reading Score'))}
                           </span>
                           <div className="text-2xl font-extrabold text-slate-900 mt-1 font-mono">
-                            {isKinder ? (student.benchmarks?.amira || 'Not recorded') : (student.benchmarks?.starReading || 'Not recorded')}
+                            {isKinder ? (student.benchmarks?.amira || 'Not recorded') : (student.benchmarks?.starReading || student.benchmarks?.amira || 'Not recorded')}
                           </div>
                         </div>
 
