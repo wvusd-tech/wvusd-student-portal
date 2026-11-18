@@ -91,22 +91,19 @@ export default function LoginView({ onLoginSuccess, error, isLoading }) {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-white py-8 px-6 shadow-xl shadow-slate-200/50 rounded-2xl border border-slate-200/80 space-y-6">
           
-          {/* Feature Pillars */}
+          {/* Feature Pillars: Clean 3 boxes with icon and title only */}
           <div className="grid grid-cols-3 gap-2 text-center pb-4 border-b border-slate-100">
-            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <BookOpen className="w-4 h-4 text-indigo-500 mx-auto mb-1" />
-              <span className="text-[11px] font-bold text-slate-700 block">Benchmarks</span>
-              <span className="text-[10px] text-slate-400">STAR & CAs</span>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
+              <BookOpen className="w-5 h-5 text-indigo-500 mb-1.5" />
+              <span className="text-xs font-bold text-slate-800">Benchmarks</span>
             </div>
-            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <Calculator className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-              <span className="text-[11px] font-bold text-slate-700 block">SBAC</span>
-              <span className="text-[10px] text-slate-400">CAASPP DFS</span>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
+              <Calculator className="w-5 h-5 text-blue-500 mb-1.5" />
+              <span className="text-xs font-bold text-slate-800">SBAC</span>
             </div>
-            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-              <Languages className="w-4 h-4 text-amber-500 mx-auto mb-1" />
-              <span className="text-[11px] font-bold text-slate-700 block">ELPAC</span>
-              <span className="text-[10px] text-slate-400">ELD Progress</span>
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col items-center justify-center">
+              <Languages className="w-5 h-5 text-amber-500 mb-1.5" />
+              <span className="text-xs font-bold text-slate-800">ELPAC</span>
             </div>
           </div>
 
@@ -130,10 +127,17 @@ export default function LoginView({ onLoginSuccess, error, isLoading }) {
             </div>
           )}
 
-          {/* Loading State */}
+          {/* Loading State: Animated Bouncing Dots */}
           {isLoading && (
-            <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium text-center animate-pulse">
-              Authenticating and fetching your classroom roster...
+            <div className="flex flex-col items-center justify-center py-4 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-3 h-3 bg-purple-600 rounded-full animate-bounce"></span>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">
+                Loading classroom roster & assessment data...
+              </span>
             </div>
           )}
 
