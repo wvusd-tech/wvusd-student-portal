@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ShieldCheck, Sparkles, BookOpen, Calculator, Languages, Lock, ArrowRight } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Sparkles, BookOpen, Calculator, Languages, Lock } from 'lucide-react';
 import { DISTRICT_LOGO, GOOGLE_CLIENT_ID } from '../config/constants.js';
 
 function decodeJwt(token) {
@@ -20,8 +20,6 @@ function decodeJwt(token) {
 
 export default function LoginView({ onLoginSuccess, error, isLoading }) {
   const googleBtnRef = useRef(null);
-  const [manualEmail, setManualEmail] = useState('');
-  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     /* global google */
@@ -56,12 +54,6 @@ export default function LoginView({ onLoginSuccess, error, isLoading }) {
       }
     }
   }, [onLoginSuccess]);
-
-  const handleManualSubmit = (e) => {
-    e.preventDefault();
-    if (!manualEmail.trim() || !manualEmail.includes('@wvusd.org')) return;
-    onLoginSuccess('', manualEmail.trim().toLowerCase());
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -140,42 +132,6 @@ export default function LoginView({ onLoginSuccess, error, isLoading }) {
               </span>
             </div>
           )}
-
-          {/* Alternative Email Login Accordion */}
-          <div className="pt-2 text-center">
-            {!showManual ? (
-              <button
-                type="button"
-                onClick={() => setShowManual(true)}
-                className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
-              >
-                Sign in with verified staff email instead
-              </button>
-            ) : (
-              <form onSubmit={handleManualSubmit} className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={manualEmail}
-                    onChange={(e) => setManualEmail(e.target.value)}
-                    placeholder="username@wvusd.org"
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!manualEmail.includes('@wvusd.org')}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-blue-600 disabled:bg-slate-300 text-white rounded-md text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
-                  >
-                    <span>Enter</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400">
-                  Staff account verified against authoritative district directory.
-                </p>
-              </form>
-            )}
-          </div>
 
           {/* District Footnote */}
           <div className="pt-4 border-t border-slate-100 text-center">

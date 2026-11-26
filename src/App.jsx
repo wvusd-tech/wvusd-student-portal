@@ -49,13 +49,19 @@ export default function App() {
   const lockedSchool = isSiteAdmin ? (user.assignedSites?.[0] || user.school) : null;
 
   // Handle Google Login / Auth
-  const handleLogin = useCallback(async (idToken, fallbackEmail = '') => {
+  const handleLogin = useCallback(async (idToken) => {
+    if (!idToken || typeof idToken !== 'string' || idToken.trim().length <= 40) {
+      sessionStorage.clear();
+      setAuthError('Valid Google Sign-In credential is required.');
+      return;
+    }
+
     setIsLoadingRoster(true);
     setAuthError(null);
 
     try {
       // 1. Initial Roster + ELPAC fetch (anchor)
-      const data = await fetchRosterAndElpac(fallbackEmail, idToken);
+      const data = await fetchRosterAndElpac(idToken);
 
       if (!data || !data.user || !data.user.authorized) {
         throw new Error(data?.message || 'Unauthorized user account.');
@@ -70,7 +76,7 @@ export default function App() {
 
       // Save session
       sessionStorage.setItem('wvusd_user_email', activeUser.email);
-      if (idToken) sessionStorage.setItem('wvusd_user_token', idToken);
+      sessionStorage.setItem('wvusd_user_token', idToken);
 
       // If SuperAdmin or SiteAdmin, show mirror modal automatically
       const isMirrorRole = activeUser.role === 'SuperAdmin' || activeUser.role === 'SiteAdmin' || activeUser.school === 'ALL' || activeUser.email === 'kwendland@wvusd.org' || (activeUser.assignedSites && activeUser.assignedSites.length > 0);
@@ -78,11 +84,11 @@ export default function App() {
         setShowMirrorModal(true);
       }
 
-      // 2. Background Parallel Fetch: SBAC + Data Portal
+      // 2. Background Parallel Fetch: SBAC + Data Portal using verified id_token
       setIsLoadingStreams(true);
       const [sbacRes, dataRes] = await Promise.allSettled([
-        fetchSbacData(activeUser.email),
-        fetchDataPortalData(activeUser.email)
+        fetchSbacData(idToken),
+        fetchDataPortalData(idToken)
       ]);
 
       const sbacStudents = sbacRes.status === 'fulfilled' ? sbacRes.value : [];
@@ -95,18 +101,29 @@ export default function App() {
 
     } catch (err) {
       console.error('Login/Fetch Error:', err);
+      sessionStorage.clear();
+      setUser(null);
+      setAllDistrictStudents([]);
       setAuthError(err.message || 'Authentication failed. Please verify access with Tech TOSA.');
       setIsLoadingRoster(false);
       setIsLoadingStreams(false);
     }
   }, []);
 
-  // Restore Session on Mount
+  // Restore Session on Mount (only if non-expired id_token exists)
   useEffect(() => {
-    const cachedEmail = sessionStorage.getItem('wvusd_user_email');
     const cachedToken = sessionStorage.getItem('wvusd_user_token');
-    if (cachedEmail || cachedToken) {
-      handleLogin(cachedToken || '', cachedEmail || '');
+    if (cachedToken) {
+      try {
+        const payload = JSON.parse(atob(cachedToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (payload?.exp && payload.exp * 1000 <= Date.now()) {
+          sessionStorage.clear();
+          return;
+        }
+        handleLogin(cachedToken);
+      } catch {
+        sessionStorage.clear();
+      }
     }
   }, [handleLogin]);
 
@@ -117,6 +134,9 @@ export default function App() {
     setSelectedStudent(null);
     setMirroredTeacher(null);
     setShowMirrorModal(false);
+    setSearchQuery('');
+    setActiveFilter('ALL');
+    setSelectedGrade('ALL');
     setAuthError(null);
   };
 

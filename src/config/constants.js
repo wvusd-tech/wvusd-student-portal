@@ -10,27 +10,15 @@ export const GOOGLE_CLIENT_ID =
 
 export const ELPAC_API_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_ELPAC_URL) ||
-  "https://script.google.com/macros/s/AKfycbzRXjeAwSH3Ix0DVpMYees8DGMOAY3RrD98S3wAoZm9maKnsytHnXriSC5B16G_QGyN/exec";
-
-export const ELPAC_TOKEN =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_ELPAC_TOKEN) ||
-  "d448e928f38972b381f8dc61ae4aa1c7";
+  "https://script.google.com/macros/s/AKfycbzmcAIbfi9uycBuWY9ucRBctNWBq76UxgYNOi-xEfJLdGNbByBhHxrGufwA-MlbxK6X/exec";
 
 export const SBAC_API_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_SBAC_URL) ||
-  "https://script.google.com/macros/s/AKfycbwK_Gl3z5ANxFgyCxbv2awKDQsVrr7s2FvRusiLCKx7qa0B2Y1VN2GtoUoI0AuVaJ8/exec";
-
-export const SBAC_TOKEN =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SBAC_TOKEN) ||
-  "0cb56611228c9ea65980af2a21561233";
+  "https://script.google.com/macros/s/AKfycbw4V4dx2kKJKJLykWaO6dbGDNqxy8HcVRDar43ytSg5SYnvLrssutvx9wHWribAfmQ/exec";
 
 export const DATA_API_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_DATA_URL) ||
-  "https://script.google.com/macros/s/AKfycbzooerUiIhtgwdta9hfZ9CwyDs7tj7ctWfTEjj_5XGauDqzZTVHn-bjGtY2jgM_q6mV/exec";
-
-export const DATA_TOKEN =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_DATA_TOKEN) ||
-  "2bb2d607a4324d673d304e552ff545b1";
+  "https://script.google.com/macros/s/AKfycbzwDNJK9MsEkEQwSL1MWm3S8QqeyhIUGxrCffTERFeEZtNAiVazjW0jTegwtm6fWd8g/exec";
 
 export const DISTRICT_LOGO =
   "https://res.cloudinary.com/djv9u4054/image/upload/v1783959106/UPdated_Black_and_White_Logo-removebg-preview_zubeqp.png";

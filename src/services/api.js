@@ -1,30 +1,33 @@
 // src/services/api.js
-// Multi-endpoint federated client for WVUSD Student 360 Portal
+// Multi-endpoint federated client for WVUSD Student 360 Portal (verified Google id_token via POST)
 
 import {
   ELPAC_API_URL,
-  ELPAC_TOKEN,
   SBAC_API_URL,
-  SBAC_TOKEN,
-  DATA_API_URL,
-  DATA_TOKEN
+  DATA_API_URL
 } from '../config/constants.js';
+
+function postWithIdToken(url, idToken) {
+  return fetch(url, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ id_token: idToken.trim() })
+  });
+}
 
 /**
  * Fetch the authoritative student roster and ELPAC data from ELPAC endpoint
  */
-export async function fetchRosterAndElpac(userEmail, idToken = '') {
+export async function fetchRosterAndElpac(idToken = '') {
   if (!ELPAC_API_URL) throw new Error('ELPAC API URL is not configured.');
-  const params = new URLSearchParams({
-    appToken: ELPAC_TOKEN || ''
-  });
-  if (idToken) params.set('id_token', idToken);
-  if (userEmail) params.set('email', userEmail.trim().toLowerCase());
+  if (!idToken || typeof idToken !== 'string' || idToken.trim().length <= 40) {
+    const err = new Error('Valid Google Sign-In id_token is required.');
+    err.isForbidden = true;
+    throw err;
+  }
 
-  const res = await fetch(`${ELPAC_API_URL}?${params.toString()}`, {
-    method: 'GET',
-    headers: { 'Accept': 'application/json' }
-  });
+  const res = await postWithIdToken(ELPAC_API_URL, idToken);
   if (!res.ok) throw new Error(`ELPAC Server Error: HTTP ${res.status}`);
   const data = await res.json();
   if (data.status === 'Forbidden' || data.success === false) {
@@ -38,18 +41,11 @@ export async function fetchRosterAndElpac(userEmail, idToken = '') {
 /**
  * Fetch SBAC CAASPP assessment histories and deltas
  */
-export async function fetchSbacData(userEmail) {
-  if (!SBAC_API_URL) return null;
-  const params = new URLSearchParams({
-    email: userEmail.trim().toLowerCase(),
-    appToken: SBAC_TOKEN || ''
-  });
+export async function fetchSbacData(idToken) {
+  if (!SBAC_API_URL || !idToken) return [];
   try {
-    const res = await fetch(`${SBAC_API_URL}?${params.toString()}`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!res.ok) return null;
+    const res = await postWithIdToken(SBAC_API_URL, idToken);
+    if (!res.ok) return [];
     const data = await res.json();
     return data.students || [];
   } catch (err) {
@@ -61,18 +57,11 @@ export async function fetchSbacData(userEmail) {
 /**
  * Fetch Illuminate/Data Portal assessments (STAR, Benchmarks, Common Assessments, Kinder)
  */
-export async function fetchDataPortalData(userEmail) {
-  if (!DATA_API_URL) return null;
-  const params = new URLSearchParams({
-    email: userEmail.trim().toLowerCase(),
-    appToken: DATA_TOKEN || ''
-  });
+export async function fetchDataPortalData(idToken) {
+  if (!DATA_API_URL || !idToken) return [];
   try {
-    const res = await fetch(`${DATA_API_URL}?${params.toString()}`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!res.ok) return null;
+    const res = await postWithIdToken(DATA_API_URL, idToken);
+    if (!res.ok) return [];
     const data = await res.json();
     return data.students || [];
   } catch (err) {
